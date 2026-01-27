@@ -11080,11 +11080,17 @@ Document all IOCs:
 ];
 
 export const getLessonContent = (courseId: string, lessonId: string): LessonContent | undefined => {
+  const normalizedCourseId =
+    courseId === "blue-team-soc-fundamentals" ? "soc-fundamentals" : courseId;
+
   return lessonContents.find(
-    (lesson) => lesson.courseId === courseId && lesson.id === lessonId
+    (lesson) => lesson.courseId === normalizedCourseId && lesson.id === lessonId
   );
 };
 
 export const getCourseLessons = (courseId: string): LessonContent[] => {
-  return lessonContents.filter((lesson) => lesson.courseId === courseId);
+  const normalizedCourseId =
+    courseId === "blue-team-soc-fundamentals" ? "soc-fundamentals" : courseId;
+
+  return lessonContents.filter((lesson) => lesson.courseId === normalizedCourseId);
 };

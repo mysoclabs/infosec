@@ -7,11 +7,11 @@ const Navbar = () => {
   const isActive = (path: string) => location.pathname === path;
   
   return (
-    <nav className="w-full z-50 bg-slate-900/6000 backdrop-blur-md">
+    <nav className="w-full z-50">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
           <Link to="/" className="group">
-            <img src={logo} alt="InfosecDairies" className="h-24 w-auto ml-4" />
+            <img src={logo} alt="InfosecDairies" className="h-32 w-auto ml-4" />
           </Link>
           
           <div className="flex items-center gap-8">

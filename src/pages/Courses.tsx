@@ -1,14 +1,33 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CourseCard from "@/components/CourseCard";
-import { getCourseCardData } from "@/data/courses";
+import { fetchCourses } from "../services/api";
 import { getLiveCourseCardData } from "@/data/liveCourses";
+import { courses as staticCourses } from "@/data/courses";
 
 const Courses = () => {
   const [activeTab, setActiveTab] = useState<"self-paced" | "live">("self-paced");
-  
-  const selfPacedCourses = getCourseCardData();
+  const [selfPacedCourses, setSelfPacedCourses] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadCourses = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await fetchCourses();
+        setSelfPacedCourses(data);
+      } catch (err) {
+        setError("Failed to load courses");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadCourses();
+  }, []);
   const liveCourses = getLiveCourseCardData();
 
   return (
@@ -61,24 +80,38 @@ const Courses = () => {
             {/* Courses Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {activeTab === "self-paced" 
-                ? selfPacedCourses.map((course, index) => (
-                    <CourseCard 
-                      key={course.courseId} 
-                      title={course.title} 
-                      description={course.description} 
-                      index={index} 
-                      difficulty={course.difficulty}
-                      courseId={course.courseId}
-                      thumbnail={course.thumbnail}
-                    />
-                  ))
+                ? (
+                  loading ? (
+                    <p className="text-muted-foreground col-span-full text-center">Loading courses...</p>
+                  ) : error ? (
+                    <p className="text-red-500 col-span-full text-center">{error}</p>
+                  ) : (
+                    selfPacedCourses.map((course, index) => {
+                      const staticCourse = staticCourses.find(
+                        (c) => c.id === course.slug
+                      );
+
+                      return (
+                        <CourseCard 
+                          key={course.slug} 
+                          title={course.title} 
+                          description={course.description} 
+                          index={index} 
+                          slug={course.slug}
+                          thumbnail={staticCourse?.bgImage}
+                          difficulty={staticCourse?.difficulty}
+                        />
+                      );
+                    })
+                  )
+                )
                 : liveCourses.map((course, index) => (
                     <CourseCard 
                       key={course.id} 
                       title={course.title} 
                       description={course.description} 
                       index={index}
-                      courseId={course.id}
+                      slug={course.id}
                       isLiveCourse={true}
                     />
                   ))

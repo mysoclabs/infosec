@@ -47,7 +47,7 @@ export interface Course {
 
 export const courses: Course[] = [
   {
-    id: "soc-fundamentals",
+    id: "blue-team-soc-fundamentals",
     title: "Blue Team & SOC Fundamentals",
     shortTitle: "SOC Level 1",
     description: "Build your foundation as a Level 1 SOC analyst and step into the world of cybersecurity defense. This course covers the essential skills, tools, and workflows you need to detect and respond to threats effectively.",

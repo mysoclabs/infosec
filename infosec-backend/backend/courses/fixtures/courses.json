@@ -1,0 +1,14 @@
+[
+  {
+    "model": "courses.course",
+    "pk": 1,
+    "fields": {
+      "title": "Blue Team & SOC Fundamentals",
+      "slug": "blue-team-soc-fundamentals",
+      "description": "Introductory SOC and Blue Team course",
+      "level": "Beginner",
+      "duration_hours": 12,
+      "is_published": true
+    }
+  }
+]

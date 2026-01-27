@@ -2333,7 +2333,10 @@ export const quizzes: QuizData[] = [
 ];
 
 export const getQuizById = (courseId: string, quizId: string): QuizData | undefined => {
-  return quizzes.find(q => q.courseId === courseId && q.quizId === quizId);
+  const normalizedCourseId =
+    courseId === "blue-team-soc-fundamentals" ? "soc-fundamentals" : courseId;
+
+  return quizzes.find(q => q.courseId === normalizedCourseId && q.quizId === quizId);
 };
 
 export const getCourseQuizzes = (courseId: string): QuizData[] => {

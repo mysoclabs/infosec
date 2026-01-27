@@ -16,7 +16,7 @@ interface CourseCardProps {
   description: string;
   index: number;
   difficulty?: "easy" | "medium" | "hard";
-  courseId?: string;
+  slug?: string;
   thumbnail?: string;
   isLiveCourse?: boolean;
 }
@@ -39,9 +39,9 @@ const thumbnailMap: Record<string, string> = {
   "courses/malware-analysis-bg.jpg": malwareAnalysisBg,
 };
 
-const CourseCard = ({ title, description, index, difficulty, courseId, thumbnail, isLiveCourse }: CourseCardProps) => {
-  const linkTo = courseId 
-    ? (isLiveCourse ? `/live-courses/${courseId}` : `/courses/${courseId}`) 
+const CourseCard = ({ title, description, index, difficulty, slug, thumbnail, isLiveCourse }: CourseCardProps) => {
+  const linkTo = slug 
+    ? (isLiveCourse ? `/live-courses/${slug}` : `/courses/${slug}`) 
     : "/courses";
   const thumbnailSrc = thumbnail ? thumbnailMap[thumbnail] : null;
   

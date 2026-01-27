@@ -21,7 +21,7 @@ import detectionEngineeringBg from "@/assets/courses/detection-engineering-bg.jp
 import malwareAnalysisBg from "@/assets/courses/malware-analysis-bg.jpg";
 
 const courseBackgrounds: Record<string, string> = {
-  "soc-fundamentals": socFundamentalsBg,
+  "blue-team-soc-fundamentals": socFundamentalsBg,
   "log-analysis": logAnalysisBg,
   "siem-fundamentals": siemFundamentalsBg,
   "soc-analyst-practical": socAnalystPracticalBg,
@@ -32,12 +32,12 @@ const courseBackgrounds: Record<string, string> = {
 };
 
 const LessonViewer = () => {
-  const { courseId, lessonId } = useParams<{ courseId: string; lessonId: string }>();
+  const { slug, lessonId } = useParams<{ slug: string; lessonId: string }>();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   
-  const course = getCourseById(courseId || "");
-  const lessonContent = getLessonContent(courseId || "", lessonId || "");
+  const course = getCourseById(slug || "");
+  const lessonContent = getLessonContent(slug || "", lessonId || "");
 
   // Get all lessons flattened for navigation
   const allLessons = useMemo(() => {
@@ -63,11 +63,11 @@ const LessonViewer = () => {
 
   // Get course background
   const courseBgImage = useMemo(() => {
-    if (courseId && courseBackgrounds[courseId]) {
-      return courseBackgrounds[courseId];
+    if (slug && courseBackgrounds[slug]) {
+      return courseBackgrounds[slug];
     }
     return socFundamentalsBg;
-  }, [courseId]);
+  }, [slug]);
 
   // Redirect if course or lesson not found
   if (!course) {
@@ -75,11 +75,11 @@ const LessonViewer = () => {
   }
 
   if (!lessonId || !currentLesson) {
-    return <Navigate to={`/courses/${courseId}`} replace />;
+    return <Navigate to={`/courses/${slug}`} replace />;
   }
 
   const navigateToLesson = (newLessonId: string) => {
-    navigate(`/courses/${courseId}/lesson/${newLessonId}`);
+    navigate(`/courses/${slug}/lesson/${newLessonId}`);
   };
 
   // Parse markdown-like content to JSX
@@ -293,7 +293,7 @@ const LessonViewer = () => {
             <ScrollArea className="h-full">
               <div className="p-4">
                 {/* Course Header */}
-                <Link to={`/courses/${courseId}`} className="flex items-center gap-3 mb-6 group">
+                <Link to={`/courses/${slug}`} className="flex items-center gap-3 mb-6 group">
                   <div className="w-10 h-10 rounded-lg bg-primary/15 border border-primary/25 flex items-center justify-center">
                     <Shield className="w-5 h-5 text-primary" />
                   </div>
@@ -383,7 +383,7 @@ const LessonViewer = () => {
               <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
                 <Link to="/courses" className="hover:text-primary transition-colors">Courses</Link>
                 <ChevronRight className="w-4 h-4" />
-                <Link to={`/courses/${courseId}`} className="hover:text-primary transition-colors">{course.shortTitle}</Link>
+                <Link to={`/courses/${slug}`} className="hover:text-primary transition-colors">{course.shortTitle}</Link>
                 <ChevronRight className="w-4 h-4" />
                 <span className="text-foreground">{currentLesson.title}</span>
               </div>
@@ -536,7 +536,7 @@ const LessonViewer = () => {
                   </button>
                 ) : (
                   <Link
-                    to={`/courses/${courseId}`}
+                    to={`/courses/${slug}`}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-primary hover:bg-primary/10 transition-colors"
                   >
                     <span>Back to Course</span>

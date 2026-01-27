@@ -13,11 +13,11 @@ import { Button } from "@/components/ui/button";
 type QuizState = "intro" | "active" | "review" | "results";
 
 const QuizPage = () => {
-  const { courseId, quizId } = useParams<{ courseId: string; quizId: string }>();
+  const { slug, quizId } = useParams<{ slug: string; quizId: string }>();
   const navigate = useNavigate();
   
-  const course = getCourseById(courseId || "");
-  const quiz = getQuizById(courseId || "", quizId || "");
+  const course = getCourseById(slug || "");
+  const quiz = getQuizById(slug || "", quizId || "");
   
   const [quizState, setQuizState] = useState<QuizState>("intro");
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -67,7 +67,7 @@ const QuizPage = () => {
 
   // Redirect if not found
   if (!course || !quiz) {
-    return <Navigate to={`/courses/${courseId || ""}`} replace />;
+    return <Navigate to={`/courses/${slug || ""}`} replace />;
   }
 
   const currentQuestion = quiz.questions[currentQuestionIndex];
@@ -140,7 +140,7 @@ const QuizPage = () => {
           {/* Header */}
           <div className="mb-8">
             <Link 
-              to={`/courses/${courseId}`} 
+              to={`/courses/${slug}`} 
               className="inline-flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-4"
             >
               <ChevronLeft className="w-4 h-4" />
@@ -512,7 +512,7 @@ const QuizPage = () => {
                   Try Again
                 </Button>
                 <Button
-                  onClick={() => navigate(`/courses/${courseId}`)}
+                  onClick={() => navigate(`/courses/${slug}`)}
                   className="bg-primary hover:bg-primary/90 gap-2"
                 >
                   <Home className="w-4 h-4" />
