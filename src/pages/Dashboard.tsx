@@ -1,73 +1,45 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import { 
-  BookOpen, 
-  Trophy, 
-  Clock, 
-  TrendingUp, 
-  PlayCircle,
+import {
+  BookOpen,
+  Trophy,
+  Clock,
+  TrendingUp,
   CheckCircle,
   ChevronRight,
-  Award,
   Target,
-  Calendar
+  Calendar,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
+import { getCourseById } from "@/data/courses";
 
-// Mock user data - will be replaced with database data later
-const mockUser = {
-  name: "Alex Defender",
-  email: "alex@example.com",
-  joinedDate: "2024-01-15",
-  totalPoints: 2450,
-  rank: "Security Analyst I"
-};
+interface ApiCourse {
+  id: number;
+  title: string;
+  slug: string;
+  level: string;
+  duration_hours?: number | null;
+}
 
-const enrolledCourses = [
-  {
-    id: "blue-team-soc-fundamentals",
-    title: "Blue Team & SOC Fundamentals",
-    progress: 65,
-    completedLessons: 13,
-    totalLessons: 20,
-    lastAccessed: "2 hours ago",
-    difficulty: "Easy"
-  },
-  {
-    id: "siem-fundamentals",
-    title: "SIEM Fundamentals",
-    progress: 30,
-    completedLessons: 6,
-    totalLessons: 20,
-    lastAccessed: "1 day ago",
-    difficulty: "Easy"
-  },
-  {
-    id: "incident-response-fundamentals",
-    title: "Incident Response Fundamentals",
-    progress: 10,
-    completedLessons: 2,
-    totalLessons: 20,
-    lastAccessed: "3 days ago",
-    difficulty: "Medium"
-  }
-];
+interface EnrolledCourse {
+  id: string;
+  title: string;
+  difficulty: string;
+  completedLessons: number;
+  totalLessons: number;
+  progress: number;
+  lastAccessed: string;
+}
 
-const recentActivity = [
-  { type: "lesson", title: "Completed: Introduction to SIEM", time: "2 hours ago", icon: CheckCircle, color: "text-secondary" },
-  { type: "quiz", title: "Passed: SOC Fundamentals Quiz (85%)", time: "1 day ago", icon: Trophy, color: "text-yellow-400" },
-  { type: "lesson", title: "Started: Log Analysis Basics", time: "2 days ago", icon: PlayCircle, color: "text-primary" },
-  { type: "achievement", title: "Earned: First Steps Badge", time: "3 days ago", icon: Award, color: "text-purple-400" },
-  { type: "lesson", title: "Completed: Threat Detection Overview", time: "4 days ago", icon: CheckCircle, color: "text-secondary" }
-];
-
-const achievements = [
-  { name: "First Steps", description: "Complete your first lesson", earned: true },
-  { name: "Quick Learner", description: "Complete 5 lessons in one day", earned: true },
-  { name: "Quiz Master", description: "Score 90%+ on 3 quizzes", earned: false },
-  { name: "Dedicated", description: "Study for 7 days in a row", earned: false }
-];
+const recentActivity: {
+  title: string;
+  time: string;
+  icon: typeof CheckCircle;
+  color: string;
+}[] = [];
 
 const getDifficultyColor = (difficulty: string) => {
   switch (difficulty) {
@@ -79,6 +51,162 @@ const getDifficultyColor = (difficulty: string) => {
 };
 
 const Dashboard = () => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [enrolledCourses, setEnrolledCourses] = useState<EnrolledCourse[]>([]);
+
+  useEffect(() => {
+    const fetchEnrollments = async () => {
+      const accessToken = localStorage.getItem("accessToken");
+      if (!accessToken) {
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        const coursesRes = await fetch(`/api/courses/`);
+        if (!coursesRes.ok) {
+          throw new Error("Failed to load courses");
+        }
+        const courses: ApiCourse[] = await coursesRes.json();
+
+        const enrollmentChecks = await Promise.all(
+          courses.map(async (course) => {
+            // Only track progress for fully implemented courses
+            const isCourseProgressEnabled = [
+              "blue-team-soc-fundamentals",
+              "log-analysis-for-beginners",
+            ].includes(course.slug);
+
+            if (!isCourseProgressEnabled) {
+              return null;
+            }
+            const res = await fetch(
+              `/api/courses/${course.slug}/enrollment/`,
+              {
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                },
+              },
+            );
+
+            if (!res.ok) {
+              return null;
+            }
+            const data = await res.json();
+            if (data.status !== "enrolled") {
+              return null;
+            }
+
+            const difficulty =
+              course.level?.toLowerCase() === "advanced"
+                ? "Hard"
+                : course.level?.toLowerCase() === "intermediate"
+                ? "Medium"
+                : "Easy";
+
+            // Map backend slug to static course id used on frontend
+            let staticCourseId = course.slug;
+            switch (course.slug) {
+              case "log-analysis-for-beginners":
+                staticCourseId = "log-analysis";
+                break;
+              case "soc-analyst-practical-training":
+                staticCourseId = "soc-analyst-practical";
+                break;
+              case "incident-response-fundamentals":
+                staticCourseId = "incident-response";
+                break;
+              case "detection-engineering-basics":
+                staticCourseId = "detection-engineering";
+                break;
+              case "malware-analysis-fundamentals":
+                staticCourseId = "malware-analysis";
+                break;
+              default:
+                // slugs that already match static ids, e.g. blue-team-soc-fundamentals
+                staticCourseId = course.slug;
+            }
+
+            const staticCourse = getCourseById(staticCourseId);
+            const totalLessons = staticCourse
+              ? staticCourse.modules.reduce(
+                  (sum, m) => sum + m.lessons.length,
+                  0,
+                )
+              : 0;
+
+            // Fetch backend lesson progress for this course
+            let completedLessons = 0;
+            try {
+              const progressRes = await fetch(
+                `/api/courses/${course.slug}/progress/`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                  },
+                },
+              );
+
+              if (progressRes.ok) {
+                const progressData: any[] = await progressRes.json();
+                const completedIds = progressData
+                  .map((item) =>
+                    item && item.lesson_id != null ? String(item.lesson_id) : null,
+                  )
+                  .filter((id: string | null): id is string => Boolean(id));
+
+                if (staticCourse) {
+                  const allLessonIds = staticCourse.modules.flatMap((m) =>
+                    m.lessons.map((l) => l.id),
+                  );
+                  completedLessons = allLessonIds.filter((id) =>
+                    completedIds.includes(id),
+                  ).length;
+                } else {
+                  completedLessons = completedIds.length;
+                }
+              }
+            } catch {
+              // best-effort; leave completedLessons at 0 on failure
+            }
+
+            const enrolled: EnrolledCourse = {
+              id: course.slug,
+              title: course.title,
+              difficulty,
+              completedLessons,
+              totalLessons,
+              progress: totalLessons ? Math.round((completedLessons / totalLessons) * 100) : 0,
+              lastAccessed: "just now", // placeholder for now
+            };
+
+            return enrolled;
+          }),
+        );
+
+        setEnrolledCourses(enrollmentChecks.filter(Boolean) as EnrolledCourse[]);
+      } catch (err) {
+        setError("Could not load your dashboard data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEnrollments();
+  }, []);
+
+  const enrolledCount = enrolledCourses.length;
+  const completedLessonsCount = useMemo(
+    () => enrolledCourses.reduce((sum, c) => sum + c.completedLessons, 0),
+    [enrolledCourses],
+  );
+  const totalPoints = completedLessonsCount * 100; // simple placeholder formula
+  const achievementsCount = 0; // Achievements will be added in a later phase
+
   return (
     <main className="min-h-screen bg-background">
       <Navbar />
@@ -87,7 +215,7 @@ const Dashboard = () => {
         {/* Welcome Header */}
         <div className="mb-8 animate-fade-up">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
-            Welcome back, <span className="gradient-text">{mockUser.name}</span>
+            Welcome back, <span className="gradient-text">{user?.email?.split("@")[0] || "Blue Teamer"}</span>
           </h1>
           <p className="text-muted-foreground">
             Continue your blue team training journey
@@ -101,7 +229,7 @@ const Dashboard = () => {
               <div className="p-2 rounded-lg bg-primary/10">
                 <BookOpen className="w-5 h-5 text-primary" />
               </div>
-              <span className="text-2xl font-bold">{enrolledCourses.length}</span>
+              <span className="text-2xl font-bold">{enrolledCount}</span>
             </div>
             <p className="text-sm text-muted-foreground">Enrolled Courses</p>
           </div>
@@ -111,7 +239,7 @@ const Dashboard = () => {
               <div className="p-2 rounded-lg bg-secondary/10">
                 <CheckCircle className="w-5 h-5 text-secondary" />
               </div>
-              <span className="text-2xl font-bold">21</span>
+              <span className="text-2xl font-bold">{completedLessonsCount}</span>
             </div>
             <p className="text-sm text-muted-foreground">Lessons Completed</p>
           </div>
@@ -121,7 +249,7 @@ const Dashboard = () => {
               <div className="p-2 rounded-lg bg-yellow-500/10">
                 <Trophy className="w-5 h-5 text-yellow-400" />
               </div>
-              <span className="text-2xl font-bold">{mockUser.totalPoints}</span>
+              <span className="text-2xl font-bold">{totalPoints}</span>
             </div>
             <p className="text-sm text-muted-foreground">Total Points</p>
           </div>
@@ -131,7 +259,7 @@ const Dashboard = () => {
               <div className="p-2 rounded-lg bg-purple-500/10">
                 <Target className="w-5 h-5 text-purple-400" />
               </div>
-              <span className="text-2xl font-bold">2</span>
+              <span className="text-2xl font-bold">{achievementsCount}</span>
             </div>
             <p className="text-sm text-muted-foreground">Achievements</p>
           </div>
@@ -151,6 +279,17 @@ const Dashboard = () => {
             </div>
 
             <div className="space-y-4">
+              {loading && (
+                <p className="text-sm text-muted-foreground">Loading your courses...</p>
+              )}
+              {error && !loading && (
+                <p className="text-sm text-red-500">{error}</p>
+              )}
+              {!loading && !error && enrolledCourses.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  You are not enrolled in any courses yet. Browse courses to get started.
+                </p>
+              )}
               {enrolledCourses.map((course, index) => (
                 <div 
                   key={course.id}
@@ -193,35 +332,7 @@ const Dashboard = () => {
               ))}
             </div>
 
-            {/* Achievements Section */}
-            <div className="animate-fade-up" style={{ animationDelay: "400ms" }}>
-              <h2 className="text-xl font-semibold flex items-center gap-2 mb-4">
-                <Award className="w-5 h-5 text-purple-400" />
-                Achievements
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {achievements.map((achievement) => (
-                  <div 
-                    key={achievement.name}
-                    className={`p-4 rounded-lg border text-center transition-all ${
-                      achievement.earned 
-                        ? "bg-purple-500/10 border-purple-500/30" 
-                        : "bg-muted/30 border-border opacity-50"
-                    }`}
-                  >
-                    <div className={`w-10 h-10 mx-auto mb-2 rounded-full flex items-center justify-center ${
-                      achievement.earned ? "bg-purple-500/20" : "bg-muted"
-                    }`}>
-                      <Award className={`w-5 h-5 ${achievement.earned ? "text-purple-400" : "text-muted-foreground"}`} />
-                    </div>
-                    <p className={`text-sm font-medium ${achievement.earned ? "text-foreground" : "text-muted-foreground"}`}>
-                      {achievement.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">{achievement.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Achievements Section - placeholder for future backend data */}
           </div>
 
           {/* Sidebar - Recent Activity & Stats */}
@@ -230,20 +341,20 @@ const Dashboard = () => {
             <div className="bg-gradient-to-br from-primary/10 to-secondary/10 border border-primary/20 rounded-lg p-5 animate-fade-up" style={{ animationDelay: "200ms" }}>
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-xl font-bold text-primary-foreground">
-                  {mockUser.name.charAt(0)}
+                  {(user?.email || "U").charAt(0).toUpperCase()}
                 </div>
                 <div>
-                  <p className="font-semibold">{mockUser.name}</p>
+                  <p className="font-semibold">{user?.email ? user.email.split("@")[0] : "Your account"}</p>
                   <p className="text-sm text-primary flex items-center gap-1">
                     <TrendingUp className="w-3 h-3" />
-                    {mockUser.rank}
+                    Blue Team Learner
                   </p>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-border/50">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="w-4 h-4" />
-                  Member since {new Date(mockUser.joinedDate).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  Member since {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
                 </div>
               </div>
             </div>
@@ -254,19 +365,25 @@ const Dashboard = () => {
                 <Clock className="w-5 h-5 text-primary" />
                 Recent Activity
               </h2>
-              <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      <activity.icon className={`w-4 h-4 ${activity.color}`} />
+              {recentActivity.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No activity yet. Your recent lessons, quizzes, and achievements will show up here.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {recentActivity.map((activity, index) => (
+                    <div key={index} className="flex items-start gap-3">
+                      <div className="mt-0.5">
+                        <activity.icon className={`w-4 h-4 ${activity.color}`} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{activity.title}</p>
+                        <p className="text-xs text-muted-foreground">{activity.time}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{activity.title}</p>
-                      <p className="text-xs text-muted-foreground">{activity.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Quick Actions */}

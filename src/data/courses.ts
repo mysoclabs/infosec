@@ -64,14 +64,14 @@ export const courses: Course[] = [
             title: "Welcome to the SOC", 
             description: "Understand what a Security Operations Center is, its mission, and how it fits into an organization's security posture.",
             duration: "15 min",
-            status: "completed" 
+            status: "unlocked" 
           },
           { 
             id: "1.2", 
             title: "SOC Team Roles & Responsibilities", 
             description: "Learn about different SOC roles from L1 Analyst to SOC Manager and their daily responsibilities.",
             duration: "20 min",
-            status: "unlocked" 
+            status: "locked" 
           },
           { 
             id: "1.3", 

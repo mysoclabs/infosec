@@ -64,6 +64,20 @@ const CourseDetail = () => {
     "modules"
   );
   const [openModules, setOpenModules] = useState<string[]>(["1", "2"]);
+  const [isEnrolled, setIsEnrolled] = useState(false);
+  const [checkingEnrollment, setCheckingEnrollment] = useState(false);
+  const [enrollLoading, setEnrollLoading] = useState(false);
+  const [enrollError, setEnrollError] = useState<string | null>(null);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+
+  // Only some courses are fully implemented with enrollment/progress
+  const isCourseProgressEnabled = useMemo(() => {
+    if (!slug) return false;
+    return [
+      "blue-team-soc-fundamentals",     // SOC Level 1
+      "log-analysis-for-beginners",     // Log Analysis
+    ].includes(slug);
+  }, [slug]);
 
   useEffect(() => {
     if (!slug) return;
@@ -84,9 +98,58 @@ const CourseDetail = () => {
     loadCourse();
   }, [slug]);
 
+  // Check enrollment status for the current user (only for fully enabled courses)
+  useEffect(() => {
+    if (!slug || !isCourseProgressEnabled) return;
+
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      setIsEnrolled(false);
+      return;
+    }
+
+    const checkEnrollment = async () => {
+      try {
+        setCheckingEnrollment(true);
+        setEnrollError(null);
+        const res = await fetch(`/api/courses/${slug}/enrollment/`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (res.status === 401) {
+          // Token invalid/expired - force re-auth
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userEmail");
+          navigate("/auth");
+          setIsEnrolled(false);
+          return;
+        }
+
+        if (!res.ok) {
+          setIsEnrolled(false);
+          return;
+        }
+        const data = await res.json();
+        setIsEnrolled(data.status === "enrolled");
+      } catch (err) {
+        setIsEnrolled(false);
+      } finally {
+        setCheckingEnrollment(false);
+      }
+    };
+
+    checkEnrollment();
+  }, [slug, isCourseProgressEnabled, navigate]);
+
   const staticCourse = useMemo(
-    () => staticCourses.find((c) => c.id === slug),
-    [slug]
+    () =>
+      staticCourses.find(
+        (c) => c.id === slug || (courseMeta && c.title === courseMeta.title)
+      ),
+    [slug, courseMeta]
   );
 
   const levelToDifficulty: Record<string, "easy" | "medium" | "hard"> = {
@@ -111,6 +174,51 @@ const CourseDetail = () => {
         : staticCourse.duration,
     };
   }, [staticCourse, courseMeta]);
+
+  // Load lesson completion progress for this course when user is logged in (only for enabled courses)
+  useEffect(() => {
+    if (!isCourseProgressEnabled) {
+      setCompletedLessonIds([]);
+      return;
+    }
+
+    const accessToken = localStorage.getItem("accessToken");
+    if (!slug || !accessToken) {
+      setCompletedLessonIds([]);
+      return;
+    }
+
+    const fetchProgress = async () => {
+      try {
+        const res = await fetch(`/api/courses/${slug}/progress/`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userEmail");
+          navigate("/auth");
+          return;
+        }
+
+        if (!res.ok) return;
+
+        const data: any[] = await res.json();
+        const ids = data
+          .map((item) => (item && item.lesson_id != null ? String(item.lesson_id) : null))
+          .filter((id: string | null): id is string => Boolean(id));
+
+        setCompletedLessonIds(ids);
+      } catch {
+        // best-effort; keep existing state on failure
+      }
+    };
+
+    fetchProgress();
+  }, [slug, isCourseProgressEnabled, navigate]);
 
   // Get course-specific background image
   const courseBgImage = useMemo(() => {
@@ -161,10 +269,70 @@ const CourseDetail = () => {
     0
   );
   const completedLessons = course.modules.reduce(
-    (acc, m) => acc + m.lessons.filter((l) => l.status === "completed").length,
+    (acc, m) =>
+      acc + m.lessons.filter((l) => completedLessonIds.includes(l.id)).length,
     0
   );
   const progressPercent = Math.round((completedLessons / totalLessons) * 100);
+
+  const handlePrimaryCta = async () => {
+    if (!slug) return;
+
+    // For coming-soon courses, do not hit backend; show friendly message instead
+    if (!isCourseProgressEnabled) {
+      setEnrollError("This course is under development. Content coming soon.");
+      return;
+    }
+
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      // Not logged in - send to auth page
+      navigate("/auth");
+      return;
+    }
+
+    // If already enrolled, jump to first lesson
+    if (isEnrolled) {
+      const firstModule = course.modules[0];
+      const firstLesson = firstModule?.lessons?.[0];
+      if (firstLesson) {
+        navigate(`/courses/${slug}/lesson/${firstLesson.id}`);
+      }
+      return;
+    }
+
+    try {
+      setEnrollLoading(true);
+      setEnrollError(null);
+      const res = await fetch(`/api/courses/${slug}/enroll/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (res.status === 401) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("userEmail");
+        navigate("/auth");
+        return;
+      }
+
+      const data = await res.json();
+      if (!res.ok || data.status !== "enrolled") {
+        setEnrollError("Could not enroll. Please try again.");
+        return;
+      }
+
+      setIsEnrolled(true);
+    } catch (err) {
+      setEnrollError("Network error. Please try again.");
+    } finally {
+      setEnrollLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -373,31 +541,46 @@ const CourseDetail = () => {
 
                         <CollapsibleContent>
                           <div className="border-t border-white/[0.06]">
-                            {module.lessons.map((lesson) => (
-                              <div
-                                key={lesson.id}
-                                onClick={() =>
-                                  lesson.status !== "locked" &&
-                                  navigate(
-                                    `/courses/${slug}/lesson/${lesson.id}`
-                                  )
-                                }
-                                className={`px-6 py-4 pl-7 flex items-center justify-between border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02] transition-colors ${
-                                  lesson.status !== "locked"
-                                    ? "cursor-pointer"
-                                    : ""
-                                }`}
-                              >
-                                <div className="flex items-start gap-3">
-                                  <span className="mt-0.5">
-                                    {lesson.status === "completed" ? (
-                                      <CheckCircle className="w-4 h-4 text-primary" />
-                                    ) : lesson.status === "locked" ? (
-                                      <Lock className="w-4 h-4 text-muted-foreground/40" />
-                                    ) : (
-                                      <ChevronDown className="w-4 h-4 text-primary" />
-                                    )}
-                                  </span>
+                            {module.lessons.map((lesson) => {
+                              const isCompleted = completedLessonIds.includes(lesson.id);
+                              const isLocked = !isCompleted && lesson.status === "locked";
+
+                              return (
+                                <div
+                                  key={lesson.id}
+                                  onClick={() => {
+                                    if (isLocked) return;
+
+                                    // Require authentication
+                                    const accessToken = localStorage.getItem("accessToken");
+                                    if (!accessToken) {
+                                      navigate("/auth");
+                                      return;
+                                    }
+
+                                    // Require enrollment before accessing lessons
+                                    if (!isEnrolled) {
+                                      // Reuse primary CTA logic (enroll flow)
+                                      handlePrimaryCta();
+                                      return;
+                                    }
+
+                                    navigate(`/courses/${slug}/lesson/${lesson.id}`);
+                                  }}
+                                  className={`px-6 py-4 pl-7 flex items-center justify-between border-b border-white/[0.04] last:border-b-0 hover:bg-white/[0.02] transition-colors ${
+                                    !isLocked ? "cursor-pointer" : ""
+                                  }`}
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <span className="mt-0.5">
+                                      {isCompleted ? (
+                                        <CheckCircle className="w-4 h-4 text-primary" />
+                                      ) : isLocked ? (
+                                        <Lock className="w-4 h-4 text-muted-foreground/40" />
+                                      ) : (
+                                        <ChevronDown className="w-4 h-4 text-primary" />
+                                      )}
+                                    </span>
                                   <div>
                                     <div className="flex items-center gap-2">
                                       <span className="text-sm text-muted-foreground mr-2">
@@ -405,7 +588,7 @@ const CourseDetail = () => {
                                       </span>
                                       <span
                                         className={`text-sm ${
-                                          lesson.status === "locked"
+                                          isLocked
                                             ? "text-muted-foreground/60"
                                             : "text-foreground"
                                         }`}
@@ -421,19 +604,20 @@ const CourseDetail = () => {
                                   </div>
                                 </div>
 
-                                {lesson.status === "completed" && (
+                                {isCompleted && (
                                   <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/15 text-primary border border-primary/25">
                                     Completed
                                   </span>
                                 )}
-                                {lesson.status === "locked" && (
+                                {isLocked && (
                                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground/50">
                                     <Lock className="w-3 h-3" />
                                     Locked
                                   </span>
                                 )}
                               </div>
-                            ))}
+                            );
+                          })}
                           </div>
                         </CollapsibleContent>
                       </div>
@@ -643,8 +827,22 @@ const CourseDetail = () => {
                     <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-primary/[0.03] via-transparent to-secondary/[0.02] pointer-events-none" />
                     <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gradient-to-b from-primary to-secondary opacity-50" />
 
-                    <button className="relative w-full flex items-center justify-center gap-2 px-6 py-4 rounded-lg bg-primary/90 text-background font-semibold hover:bg-primary transition-colors group">
-                      <span>Continue Course</span>
+                    {enrollError && (
+                      <p className="mb-3 text-xs text-red-500">{enrollError}</p>
+                    )}
+
+                    <button
+                      onClick={handlePrimaryCta}
+                      disabled={checkingEnrollment || enrollLoading}
+                      className="relative w-full flex items-center justify-center gap-2 px-6 py-4 rounded-lg bg-primary/90 text-background font-semibold hover:bg-primary transition-colors group disabled:opacity-70 disabled:cursor-not-allowed"
+                    >
+                      <span>
+                        {checkingEnrollment || enrollLoading
+                          ? "Please wait..."
+                          : isEnrolled
+                          ? "Continue Course"
+                          : "Enroll"}
+                      </span>
                       <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>

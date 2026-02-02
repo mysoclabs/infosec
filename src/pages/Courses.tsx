@@ -88,7 +88,7 @@ const Courses = () => {
                   ) : (
                     selfPacedCourses.map((course, index) => {
                       const staticCourse = staticCourses.find(
-                        (c) => c.id === course.slug
+                        (c) => c.id === course.slug || c.title === course.title
                       );
 
                       return (

@@ -35,9 +35,57 @@ const LessonViewer = () => {
   const { slug, lessonId } = useParams<{ slug: string; lessonId: string }>();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  
-  const course = getCourseById(slug || "");
-  const lessonContent = getLessonContent(slug || "", lessonId || "");
+  const [markingComplete, setMarkingComplete] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
+  const [completedLessonIds, setCompletedLessonIds] = useState<string[]>([]);
+
+  // Normalize backend slugs separately for course metadata vs lesson content
+  // Course metadata (data/courses.ts) uses one set of IDs, while lessonContent
+  // still uses a legacy ID for the SOC fundamentals course.
+  const courseIdForMeta = useMemo(() => {
+    if (!slug) return "";
+
+    switch (slug) {
+      case "log-analysis-for-beginners":
+        return "log-analysis";
+      case "soc-analyst-practical-training":
+        return "soc-analyst-practical";
+      case "incident-response-fundamentals":
+        return "incident-response";
+      case "detection-engineering-basics":
+        return "detection-engineering";
+      case "malware-analysis-fundamentals":
+        return "malware-analysis";
+      default:
+        // slugs that already match static course IDs (e.g. blue-team-soc-fundamentals, siem-fundamentals)
+        return slug;
+    }
+  }, [slug]);
+
+  const lessonsCourseId = useMemo(() => {
+    if (!slug) return "";
+
+    switch (slug) {
+      case "blue-team-soc-fundamentals":
+        // lessonContent still keyed by legacy ID for this course
+        return "soc-fundamentals";
+      case "log-analysis-for-beginners":
+        return "log-analysis";
+      case "soc-analyst-practical-training":
+        return "soc-analyst-practical";
+      case "incident-response-fundamentals":
+        return "incident-response";
+      case "detection-engineering-basics":
+        return "detection-engineering";
+      case "malware-analysis-fundamentals":
+        return "malware-analysis";
+      default:
+        return slug;
+    }
+  }, [slug]);
+
+  const course = getCourseById(courseIdForMeta);
+  const lessonContent = getLessonContent(lessonsCourseId, lessonId || "");
 
   // Get all lessons flattened for navigation
   const allLessons = useMemo(() => {
@@ -57,9 +105,20 @@ const LessonViewer = () => {
   const prevLesson = currentLessonIndex > 0 ? allLessons[currentLessonIndex - 1] : null;
   const nextLesson = currentLessonIndex < allLessons.length - 1 ? allLessons[currentLessonIndex + 1] : null;
 
-  // Calculate progress
-  const completedCount = allLessons.filter((l) => l.status === "completed").length;
-  const progressPercent = Math.round((completedCount / allLessons.length) * 100);
+  // Only some courses have full lesson navigation/progress enabled
+  const isCourseProgressEnabled = useMemo(() => {
+    if (!slug) return false;
+    return [
+      "blue-team-soc-fundamentals", // SOC Level 1
+      "log-analysis-for-beginners", // Log Analysis course
+    ].includes(slug);
+  }, [slug]);
+
+  // Calculate progress based on backend-tracked completions
+  const completedCount = allLessons.filter((l) => completedLessonIds.includes(l.id)).length;
+  const progressPercent = allLessons.length
+    ? Math.round((completedCount / allLessons.length) * 100)
+    : 0;
 
   // Get course background
   const courseBgImage = useMemo(() => {
@@ -68,6 +127,61 @@ const LessonViewer = () => {
     }
     return socFundamentalsBg;
   }, [slug]);
+
+  // Ensure we start from top when navigating between lessons/chapters
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [lessonId]);
+
+  // Load completion progress from backend for this course
+  useEffect(() => {
+    const accessToken = localStorage.getItem("accessToken");
+    if (!slug || !accessToken) {
+      setCompletedLessonIds([]);
+      return;
+    }
+
+    const fetchProgress = async () => {
+      try {
+        const res = await fetch(`/api/courses/${slug}/progress/`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        if (res.status === 401) {
+          // Token is missing/invalid/expired - force re-auth
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          localStorage.removeItem("userEmail");
+          navigate("/auth");
+          return;
+        }
+
+        if (!res.ok) return;
+
+        const data: any[] = await res.json();
+        const ids = data
+          .map((item) => (item && item.lesson_id != null ? String(item.lesson_id) : null))
+          .filter((id: string | null): id is string => Boolean(id));
+
+        setCompletedLessonIds(ids);
+      } catch {
+        // best-effort; if it fails, keep existing local state
+      }
+    };
+
+    fetchProgress();
+  }, [slug]);
+
+  // Initialize completion state for the currently viewed lesson
+  useEffect(() => {
+    if (currentLesson && completedLessonIds.includes(currentLesson.id)) {
+      setIsCompleted(true);
+    } else {
+      setIsCompleted(false);
+    }
+  }, [currentLesson?.id, completedLessonIds]);
 
   // Redirect if course or lesson not found
   if (!course) {
@@ -80,6 +194,51 @@ const LessonViewer = () => {
 
   const navigateToLesson = (newLessonId: string) => {
     navigate(`/courses/${slug}/lesson/${newLessonId}`);
+  };
+
+  const markLessonComplete = async (): Promise<boolean> => {
+    if (!slug || !lessonId || markingComplete || isCompleted) return false;
+
+    const accessToken = localStorage.getItem("accessToken");
+    if (!accessToken) {
+      navigate("/auth");
+      return false;
+    }
+
+    try {
+      setMarkingComplete(true);
+
+      const res = await fetch(`/api/courses/${slug}/lessons/${lessonId}/complete/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (res.status === 401) {
+        // Token is missing/invalid/expired - force re-auth
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("userEmail");
+        navigate("/auth");
+        return false;
+      }
+
+      if (!res.ok) {
+        return false;
+      }
+
+      setIsCompleted(true);
+      setCompletedLessonIds((prev) =>
+        prev.includes(lessonId) ? prev : [...prev, lessonId]
+      );
+      return true;
+    } catch (err) {
+      return false;
+    } finally {
+      setMarkingComplete(false);
+    }
   };
 
   // Parse markdown-like content to JSX
@@ -318,8 +477,8 @@ const LessonViewer = () => {
                       <div className="space-y-0.5">
                         {module.lessons.map((lesson) => {
                           const isActive = lesson.id === lessonId;
-                          const isLocked = lesson.status === "locked";
-                          const isCompleted = lesson.status === "completed";
+                          const isCompleted = completedLessonIds.includes(lesson.id);
+                          const isLocked = !isActive && !isCompleted && lesson.status === "locked";
                           
                           return (
                             <button
@@ -519,29 +678,50 @@ const LessonViewer = () => {
                   <div />
                 )}
 
-                <button className="px-6 py-2.5 rounded-lg bg-primary text-background font-medium hover:bg-primary/90 transition-colors">
-                  Mark as Complete
-                </button>
-
-                {nextLesson ? (
-                  <button
-                    onClick={() => navigateToLesson(nextLesson.id)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.03] transition-colors"
-                  >
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Next</div>
-                      <div className="text-sm">{nextLesson.title}</div>
-                    </div>
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
+                {isCourseProgressEnabled ? (
+                  nextLesson ? (
+                    <button
+                      onClick={() => {
+                        // Fire-and-forget: try to mark current lesson complete, but don't block navigation
+                        void markLessonComplete();
+                        navigateToLesson(nextLesson.id);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.03] transition-colors"
+                    >
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground">Next</div>
+                        <div className="text-sm">{nextLesson.title}</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        // On the final lesson, mark it complete (best-effort) then go back to course
+                        void markLessonComplete();
+                        navigate(`/courses/${slug}`);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                    >
+                      <span>Back to Course</span>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  )
                 ) : (
-                  <Link
-                    to={`/courses/${slug}`}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-                  >
-                    <span>Back to Course</span>
-                    <ChevronRight className="w-4 h-4" />
-                  </Link>
+                  nextLesson ? (
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground/40 cursor-not-allowed border border-dashed border-muted/30"
+                    >
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground/60">Next</div>
+                        <div className="text-sm">Coming soon</div>
+                      </div>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <span />
+                  )
                 )}
               </div>
             </div>

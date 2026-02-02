@@ -1,7 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export async function fetchCourses() {
-  const res = await fetch(`${API_BASE}/api/courses/`);
+  const res = await fetch(`/api/courses/`);
   if (!res.ok) {
     throw new Error("Failed to fetch courses");
   }
@@ -12,7 +12,7 @@ export async function fetchCourses() {
 }
 
 export async function fetchCourseBySlug(slug: string) {
-  const res = await fetch(`${API_BASE}/api/courses/${slug}/`);
+  const res = await fetch(`/api/courses/${slug}/`);
   if (!res.ok) {
     throw new Error("Course not found");
   }

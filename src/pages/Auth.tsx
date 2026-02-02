@@ -1,12 +1,102 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { Shield } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { Shield, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/context/AuthContext";
 
 const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    if (!email || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+
+    if (!isLogin) {
+      if (!fullName) {
+        setError("Username is required for sign up.");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+    }
+
+    try {
+      setLoading(true);
+
+      const url = isLogin
+        ? `/api/auth/login/`
+        : `/api/auth/register/`;
+
+      const body = isLogin
+        ? { email, password }
+        : { full_name: fullName, email, password };
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data && typeof data === "object") {
+          const firstErrorKey = Object.keys(data)[0];
+          const firstErrorValue =
+            firstErrorKey && Array.isArray(data[firstErrorKey])
+              ? data[firstErrorKey][0]
+              : data[firstErrorKey] || "Something went wrong. Please try again.";
+          setError(String(firstErrorValue));
+        } else {
+          setError("Something went wrong. Please try again.");
+        }
+        return;
+      }
+
+      const tokens = data.tokens;
+
+      if (!data.email) {
+        // Fallback: use the email the user typed if backend didn't echo it
+        data.email = email;
+      }
+
+      login({ email: data.email, tokens });
+
+      setSuccess(isLogin ? "Logged in successfully." : "Account created successfully.");
+
+      setTimeout(() => {
+        navigate("/courses");
+      }, 800);
+    } catch (err) {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-background flex items-center justify-center px-4">
@@ -29,7 +119,21 @@ const Auth = () => {
         </div>
 
         <div className="bg-card border border-border rounded-lg p-8 animate-fade-up" style={{ animationDelay: "100ms" }}>
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="fullName">Username</Label>
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="tej_learner"
+                  className="bg-background"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -37,33 +141,81 @@ const Auth = () => {
                 type="email"
                 placeholder="you@example.com"
                 className="bg-background"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                className="bg-background"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  className="bg-background pr-10"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
             </div>
 
             {!isLogin && (
               <div className="space-y-2">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="••••••••"
-                  className="bg-background"
-                />
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    className="bg-background pr-10"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute inset-y-0 right-0 flex items-center pr-3 text-muted-foreground hover:text-foreground"
+                    aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
             )}
 
-            <Button type="submit" className="w-full">
-              {isLogin ? "Sign In" : "Sign Up"}
+            {error && (
+              <p className="text-sm text-red-500">{error}</p>
+            )}
+
+            {success && (
+              <p className="text-sm text-green-500">{success}</p>
+            )}
+
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading
+                ? isLogin
+                  ? "Signing in..."
+                  : "Creating account..."
+                : isLogin
+                  ? "Sign In"
+                  : "Sign Up"}
             </Button>
           </form>
 

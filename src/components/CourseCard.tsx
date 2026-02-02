@@ -1,4 +1,3 @@
-import { Shield } from "lucide-react";
 import { Link } from "react-router-dom";
 
 // Import all course thumbnails
@@ -39,11 +38,27 @@ const thumbnailMap: Record<string, string> = {
   "courses/malware-analysis-bg.jpg": malwareAnalysisBg,
 };
 
+// Fallback mapping by slug, in case thumbnail strings don't match exactly
+const thumbnailBySlug: Record<string, string> = {
+  "blue-team-soc-fundamentals": socCourseBg,
+  "log-analysis": logAnalysisBg,
+  "siem-fundamentals": siemFundamentalsBg,
+  "soc-analyst-practical": socAnalystPracticalBg,
+  "incident-response": incidentResponseBg,
+  "threat-hunting": threatHuntingBg,
+  "detection-engineering": detectionEngineeringBg,
+  "malware-analysis": malwareAnalysisBg,
+};
+
 const CourseCard = ({ title, description, index, difficulty, slug, thumbnail, isLiveCourse }: CourseCardProps) => {
-  const linkTo = slug 
-    ? (isLiveCourse ? `/live-courses/${slug}` : `/courses/${slug}`) 
+  const linkTo = slug
+    ? (isLiveCourse ? `/live-courses/${slug}` : `/courses/${slug}`)
     : "/courses";
-  const thumbnailSrc = thumbnail ? thumbnailMap[thumbnail] : null;
+
+  const thumbnailSrc =
+    (thumbnail && thumbnailMap[thumbnail]) ||
+    (slug && thumbnailBySlug[slug]) ||
+    null;
   
   return (
     <Link to={linkTo} className="group relative block">
@@ -94,11 +109,7 @@ const CourseCard = ({ title, description, index, difficulty, slug, thumbnail, is
         
         {/* Content - Left aligned */}
         <div className="p-6 pl-5 flex flex-col flex-1">
-          {/* Shield icon */}
-          <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 mb-4">
-            <Shield className="w-4 h-4 text-primary" />
-          </div>
-          
+          {/* Title */}
           {/* Title */}
           <h3 className="text-lg font-semibold text-foreground tracking-tight mb-2">
             {title}

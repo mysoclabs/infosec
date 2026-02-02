@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
+from django.conf import settings
 
 
 class Course(models.Model):
@@ -21,3 +22,31 @@ class Course(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class Enrollment(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    is_paid = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "course")
+
+    def __str__(self) -> str:  # type: ignore[override]
+        return f"{self.user.email} -> {self.course.slug}"
+
+
+class LessonProgress(models.Model):
+    """Tracks which lessons a user has completed within a course."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    lesson_id = models.CharField(max_length=50)
+    completed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "course", "lesson_id")
+
+    def __str__(self) -> str:  # type: ignore[override]
+        return f"{self.user.email} -> {self.course.slug} -> {self.lesson_id}"

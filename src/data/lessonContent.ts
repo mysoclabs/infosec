@@ -11080,8 +11080,24 @@ Document all IOCs:
 ];
 
 export const getLessonContent = (courseId: string, lessonId: string): LessonContent | undefined => {
-  const normalizedCourseId =
-    courseId === "blue-team-soc-fundamentals" ? "soc-fundamentals" : courseId;
+  const normalizedCourseId = (() => {
+    switch (courseId) {
+      case "blue-team-soc-fundamentals":
+        return "soc-fundamentals";
+      case "log-analysis-for-beginners":
+        return "log-analysis";
+      case "soc-analyst-practical-training":
+        return "soc-analyst-practical";
+      case "incident-response-fundamentals":
+        return "incident-response";
+      case "detection-engineering-basics":
+        return "detection-engineering";
+      case "malware-analysis-fundamentals":
+        return "malware-analysis";
+      default:
+        return courseId;
+    }
+  })();
 
   return lessonContents.find(
     (lesson) => lesson.courseId === normalizedCourseId && lesson.id === lessonId
@@ -11089,8 +11105,24 @@ export const getLessonContent = (courseId: string, lessonId: string): LessonCont
 };
 
 export const getCourseLessons = (courseId: string): LessonContent[] => {
-  const normalizedCourseId =
-    courseId === "blue-team-soc-fundamentals" ? "soc-fundamentals" : courseId;
+  const normalizedCourseId = (() => {
+    switch (courseId) {
+      case "blue-team-soc-fundamentals":
+        return "soc-fundamentals";
+      case "log-analysis-for-beginners":
+        return "log-analysis";
+      case "soc-analyst-practical-training":
+        return "soc-analyst-practical";
+      case "incident-response-fundamentals":
+        return "incident-response";
+      case "detection-engineering-basics":
+        return "detection-engineering";
+      case "malware-analysis-fundamentals":
+        return "malware-analysis";
+      default:
+        return courseId;
+    }
+  })();
 
   return lessonContents.filter((lesson) => lesson.courseId === normalizedCourseId);
 };
